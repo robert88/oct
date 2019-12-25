@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  </meta>
+  <title>滑动导航栏</title>
+  <style>
+    #test {
+      border: 1px solid red
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="test" width="800" height="500"></canvas>
+
+  <script>
+    var canvas = document.getElementById("test");
+    var ctx = canvas.getContext("2d");
+    var allWordMap = "abcdefghijknmopqrstuvwxyzABCDEFGHIJKNMOPQRSTUVWXYZ01234567890+=-/.@%^&*()~lL".split("");
+    var findWord=[];
+    getWorksData("./all.png", function(worddata) {
+
+      getWorksData("./oct.png", function(octData) {
+        octData.forEach((w, j) => {
+          var matchindex = company(w, worddata);
+          findWord.push(allWordMap[matchindex])
+        })
+        console.log(findWord.join(""))
+      });
+    });
+
+    function company(src, dirs) {
+      var matchindex;
+      dirs.forEach((m, j) => {
+        if (matchPercent(src, m) > 98) {
+          matchindex = j;
+          return false
+        }
+      })
+      return matchindex
+    }
+
+    function matchPercent(src, dir) {
+      src = clearSpace(src)
+      dir = clearSpace(dir)
+      var matchnum = 0;
+      var plix = 0;
+      var max = Math.max(src.data.length, dir.data.length)
+      for (var i = 0; i < max; i += 4) {
+        if (src.data[i + 3] || dir.data[i + 3]) {
+          plix++;
+          if (dir.data[i + 3] && src.data[i + 3]) {
+            matchnum++;
+          }
+        }
+      }
+      return matchnum / plix * 100;
+    }
+
+    function clearSpace(data) {
+      var x = scalev(data);
+      var y = scaleh(data);
+      if(x==0&&y==0){
+        return data;
+      }
+      var word = copy(data, x, y)
+      return new ImageData(new Uint8ClampedArray(word), data.width - x, data.height - y);
+    }
+
+    function copy(data, x, y) {
+      var oneWord = []
+      for (var j = y; j < data.height; j++) {
+
+        for (var i = x; i < data.width; i++) {
+          var idx = j * data.width * 4 + 4 * i;
+          oneWord.push(data.data[idx])
+          oneWord.push(data.data[idx + 1])
+          oneWord.push(data.data[idx + 2])
+          oneWord.push(data.data[idx + 3])
+        }
+      }
+      return oneWord;
+    }
+
+    function scaleh(data) {
+      for (var j = 0; j < data.height; j++) {
+
+        for (var i = 0; i < data.width; i++) {
+          var idx = j * data.width * 4 + 4 * i;
+          if (data.data[idx + 3]) {
+            return j
+          }
+        }
+      }
+    }
+
+    function scalev(data) {
+      for (var j = 0; j < data.width; j++) {
+
+        for (var i = 0; i < data.height; i++) {
+          var idx = i * data.width * 4 + 4 * j;
+          if (data.data[idx + 3]) {
+            return j
+          }
+        }
+      }
+    }
+
+    function getWorksData(src, callback) {
+      var img = new Image;
+      img.src = src;
+      var imgdata
+      img.onload = function() {
+        canvas.width = canvas.width;
+        canvas.height = canvas.height;
+        ctx.drawImage(img, 0, 0);
+        imgdata = ctx.getImageData(0, 0, img.width, img.height + 1);
+
+        var split = splitVLine(imgdata);
+
+        var splitImagedata = getsplitVdata(split);
+
+        splitImagedata.forEach((d, i) => {
+          var splitH = splitHLine(d);
+          var worddata = getsplitHdata(splitH, d);
+          callback(worddata)
+        })
+
+      }
+
+      function createSplitData(starty, height) {
+        var data = imgdata.data.slice(starty * imgdata.width * 4, starty * imgdata.width * 4 + height * imgdata.width * 4);
+        return new ImageData(data, imgdata.width, height);
+      }
+
+      function getsplitVdata(split) {
+        var splitImagedata = [];
+        var starty = split[0];
+        for (var i = 1; i < split.length; i++) {
+          if ((split[i] - 1) != split[i - 1]) {
+            splitImagedata.push(createSplitData(starty, split[i - 1] - starty + 1))
+            starty = split[i];
+          }
+        }
+        if (starty != split[i]) {
+          splitImagedata.push(createSplitData(starty, split[i - 1] - starty + 1))
+        }
+        return splitImagedata
+      }
+
+      function getsplitHdata(split, data) {
+        var splitImagedata = [];
+        var starty = split[0];
+        for (var i = 1; i < split.length; i++) {
+          if ((split[i] - 1) != split[i - 1]) {
+            splitImagedata.push(createSplitHData(starty, split[i - 1] - starty + 1, data.data, data.width, data.height))
+            starty = split[i];
+          }
+        }
+        if (starty != split[i]) {
+          splitImagedata.push(createSplitHData(starty, split[i - 1] - starty + 1, data.data, data.width, data.height))
+        }
+        return splitImagedata
+      }
+
+      function createSplitHData(starty, width, data, orgWidth, height) {
+        if (!width) {
+          return;
+        }
+        var oneWord = new Array()
+        for (var j = 0; j < height; j++) {
+
+          for (var i = starty; i < starty + width; i++) {
+            var idx = j * orgWidth * 4 + 4 * i;
+            if (data[idx + 3]) {
+              data[idx] = 255
+            }
+            oneWord.push(data[idx])
+            oneWord.push(data[idx + 1])
+            oneWord.push(data[idx + 2])
+            oneWord.push(data[idx + 3])
+
+          }
+        }
+        return new ImageData(new Uint8ClampedArray(oneWord), width, height);
+      }
+
+      function drawLine(x, y, x1, y1) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+      }
+
+      function splitVLine(imgdata) {
+        var split = [];
+
+        for (var j = 0; j < imgdata.height; j++) {
+
+          for (var i = 0; i < imgdata.width; i++) {
+            var idx = j * imgdata.width * 4 + 4 * i;
+
+            var r = imgdata.data[idx];
+            var g = imgdata.data[idx + 1];
+            var b = imgdata.data[idx + 2];
+            var aphla = imgdata.data[idx + 3];
+            if (aphla > 125) {
+              split.push(j);
+              break
+            }
+          }
+        }
+        return split
+      }
+
+      function splitHLine(imgdata) {
+        var split = [];
+
+        for (var j = 0; j < imgdata.width; j++) {
+
+          for (var i = 0; i < imgdata.height; i++) {
+            var idx = i * imgdata.width * 4 + 4 * j;
+
+            var r = imgdata.data[idx];
+            var g = imgdata.data[idx + 1];
+            var b = imgdata.data[idx + 2];
+            var aphla = imgdata.data[idx + 3];
+            if (aphla > 125) {
+              split.push(j);
+              break
+            }
+          }
+        }
+        return split
+      }
+    }
+  </script>
+</body>
+
+</html>
