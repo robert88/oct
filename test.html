@@ -13,16 +13,17 @@
 </head>
 
 <body>
-  <canvas id="test" width="800" height="500"></canvas>
+  <canvas id="test" width="1200" height="500"></canvas>
 
   <script>
     var canvas = document.getElementById("test");
     var ctx = canvas.getContext("2d");
     var allWordMap = "abcdefghijknmopqrstuvwxyzABCDEFGHIJKNMOPQRSTUVWXYZ01234567890+=-/.@%^&*()~lL".split("");
-    var findWord=[];
+    var findWord = [];
     getWorksData("./all.png", function(worddata) {
 
       getWorksData("./oct.png", function(octData) {
+        // getWorksData("./test.png", function(octData) {
         octData.forEach((w, j) => {
           var matchindex = company(w, worddata);
           findWord.push(allWordMap[matchindex])
@@ -34,7 +35,8 @@
     function company(src, dirs) {
       var matchindex;
       dirs.forEach((m, j) => {
-        if (matchPercent(src, m) > 98) {
+        var matchInfo = tranformSpace(src, m)
+        if (matchInfo.matchPercent >= matchInfo.showPercent) {
           matchindex = j;
           return false
         }
@@ -42,27 +44,121 @@
       return matchindex
     }
 
-    function matchPercent(src, dir) {
+    function tranformSpace(src, dir) {
       src = clearSpace(src)
-      dir = clearSpace(dir)
-      var matchnum = 0;
-      var plix = 0;
-      var max = Math.max(src.data.length, dir.data.length)
-      for (var i = 0; i < max; i += 4) {
-        if (src.data[i + 3] || dir.data[i + 3]) {
-          plix++;
-          if (dir.data[i + 3] && src.data[i + 3]) {
-            matchnum++;
+      dir = clearSpace(dir);
+      var showPercent = 100;
+      var per1 = matchPercent(src, dir, function(matchnum, totalpx, srcpx, dirpx) {
+        if (src.width > 2 && src.height > 2) {
+          if (srcpx > dirpx) {
+            showPercent = (dirpx / srcpx + 1) / 2 * 100;
+          } else {
+            showPercent = (srcpx / dirpx + 1) / 2 * 100;
+          }
+        } else {
+          showPercent = 98;
+        }
+
+      });
+      var per2 = matchPercent(src, addlen(dir, 1, 0));
+      var per3 = matchPercent(src, addlen(dir, 0, 1));
+      var per4 = matchPercent(src, addlen(dir, 1, 1));
+      var per5 = matchPercent(src, addlen(dir, 0, -1));
+      var per6 = matchPercent(src, addlen(dir, -1, 0));
+      var per7 = matchPercent(src, addlen(dir, -1, -1));
+      var per8 = matchPercent(src, addlen(dir, -1, 1));
+      var per9 = matchPercent(src, addlen(dir, 1, -1));
+      
+      if(showPercent<90){
+        showPercent = 90;
+      }
+      return {
+        matchPercent: Math.max(per1, per2, per3, per4, per5, per6, per7, per8, per9),
+        showPercent: showPercent
+      };
+    }
+
+    function addlen(src, x, y) {
+      var newData = [];
+      var newData2 = [];
+      if (y > 0) {
+        newData = new Array(y * src.width * 4).fill(0);
+      }
+      src.data.forEach((value, key) => {
+        if (key >= -y * src.width * 4) {
+          newData[key + y * src.width * 4] = value;
+        }
+      });
+
+      newData.forEach((value, key) => {
+        //添加
+        if (x > 0 && (key % (src.width * 4)) < 4) {
+          for (var i = 0; i < x; i++) {
+            newData2.push(0);
           }
         }
+        //截取
+        if (x < 0 && ((key % (src.width * 4)) < -x * 4)) {
+
+        } else {
+          newData2.push(value || 0)
+        }
+
+      })
+      return new ImageData(new Uint8ClampedArray(newData2), src.width + x, src.height + y);
+    }
+
+    function matchPercent(src, dir, callback) {
+
+      var matchnum = 0;
+      var totalpx = 0;
+      var srcpx = 0;
+      var dirpx = 0;
+
+      var maxHeight = Math.max(src.height, dir.height)
+      var maxWidth = Math.max(src.width, dir.height)
+      for (var i = 0; i < maxHeight; i++) {
+        for (var j = 0; j < maxWidth; j++) {
+
+          var srcIndex = i * src.width * 4 + j * 4;
+          var dirIndex = i * dir.width * 4 + j * 4;
+          var matchSrc = src.data[srcIndex + 3];
+          if (i >= src.height || j >= src.width) {
+            matchSrc = 0;
+          }
+          var matchDir = dir.data[dirIndex + 3];
+          if (i >= dir.height || j >= dir.width) {
+            matchDir = 0;
+          }
+          if (matchSrc || matchDir) {
+            totalpx++;
+            if (matchSrc && matchDir) {
+              matchnum++;
+            }
+            if (matchSrc) {
+              srcpx++
+            } 
+            if (matchDir) {
+              dirpx++;
+            }
+          }
+        }
+
       }
-      return matchnum / plix * 100;
+      if (typeof callback == "function") {
+        callback(matchnum, totalpx, srcpx, dirpx)
+      }
+      if (src.width > 2 && src.height > 2) {
+        return (matchnum / totalpx + matchnum / srcpx + matchnum / dirpx) / 3 * 100;
+      } else {
+        return (matchnum / totalpx) * 100;
+      }
     }
 
     function clearSpace(data) {
       var x = scalev(data);
       var y = scaleh(data);
-      if(x==0&&y==0){
+      if (x == 0 && y == 0) {
         return data;
       }
       var word = copy(data, x, y)
